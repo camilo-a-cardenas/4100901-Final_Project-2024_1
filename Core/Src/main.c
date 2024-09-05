@@ -25,6 +25,8 @@
 
 #include "ssd1306.h"
 #include "ssd1306_fonts.h"
+
+#include "ring_buffer.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -50,6 +52,10 @@ UART_HandleTypeDef huart3;
 
 /* USER CODE BEGIN PV */
 
+#define USART2_BUFFER_SIZE 8
+uint8_t usart2_buffer[USART2_BUFFER_SIZE];
+ring_buffer_t usart2_rb;
+uint8_t usart2_rx;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -68,6 +74,15 @@ int _write(int file, char *ptr, int len)
 {
   HAL_UART_Transmit(&huart2, (uint8_t *)ptr, len, 10);
   return len;
+}
+
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+{
+  /* Data received in USART2 */
+  if (huart->Instance == USART2) {
+	  ring_buffer_write(&usart2_rb, usart2_rx); // put the data received in buffer
+	  HAL_UART_Receive_IT(&huart2, &usart2_rx, 1); // enable interrupt to continue receiving
+  }
 }
 /* USER CODE END 0 */
 
@@ -109,12 +124,24 @@ int main(void)
   ssd1306_SetCursor(25, 30);
   ssd1306_WriteString("Hello World!", Font_7x10, White);
   ssd1306_UpdateScreen();
+
+  ring_buffer_init(&usart2_rb, usart2_buffer, USART2_BUFFER_SIZE);
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   printf("Starting...\r\n");
+  HAL_UART_Receive_IT(&huart2, &usart2_rx, 1); // enable interrupt for USART2 Rx
   while (1) {
+	  if (ring_buffer_is_full(&usart2_rb) != 0) {
+		  printf("Received:\r\n");
+		  while (ring_buffer_is_empty(&usart2_rb) == 0) {
+			  uint8_t data;
+			  ring_buffer_read(&usart2_rb, &data);
+			  HAL_UART_Transmit(&huart2, &data, 1, 10);
+		  }
+		  printf("\r\n");
+	  }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
