@@ -27,6 +27,7 @@
 #include "ssd1306_fonts.h"
 
 #include "ring_buffer.h"
+#include "keypad.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -56,6 +57,9 @@ UART_HandleTypeDef huart3;
 uint8_t usart2_buffer[USART2_BUFFER_SIZE];
 ring_buffer_t usart2_rb;
 uint8_t usart2_rx;
+
+uint32_t left_toggles = 0;
+uint32_t left_last_press_tick = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -83,6 +87,27 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 	  ring_buffer_write(&usart2_rb, usart2_rx); // put the data received in buffer
 	  HAL_UART_Receive_IT(&huart2, &usart2_rx, 1); // enable interrupt to continue receiving
   }
+}
+
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+	uint8_t key_pressed = keypad_scan(GPIO_Pin);
+	if (key_pressed != 0xFF) {
+		printf("Pressed: %c\r\n", key_pressed);
+		return;
+	}
+
+	if (GPIO_Pin == BUTTON_RIGHT_Pin) {
+		HAL_UART_Transmit(&huart2, (uint8_t *)"S1\r\n", 4, 10);
+		if (HAL_GetTick() < (left_last_press_tick + 300)) { // if last press was in the last 300ms
+			left_toggles = 0xFFFFFF; // a long time toggling (infinite)
+		} else {
+			left_toggles = 6;
+		}
+		left_last_press_tick = HAL_GetTick();
+	} else if (GPIO_Pin == BUTTON_LEFT_Pin) {
+		left_toggles = 0;
+	}
 }
 /* USER CODE END 0 */
 
