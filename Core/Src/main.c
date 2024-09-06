@@ -84,8 +84,10 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
   /* Data received in USART2 */
   if (huart->Instance == USART2) {
+	  usart2_rx = USART2->RDR; // leyendo el byte recibido de USART2
 	  ring_buffer_write(&usart2_rb, usart2_rx); // put the data received in buffer
-	  HAL_UART_Receive_IT(&huart2, &usart2_rx, 1); // enable interrupt to continue receiving
+	  //HAL_UART_Receive_IT(&huart2, &usart2_rx, 1); // enable interrupt to continue receiving
+	  ATOMIC_SET_BIT(USART2->CR1, USART_CR1_RXNEIE); // usando un funcion mas liviana para reducir memoria
   }
 }
 
@@ -156,7 +158,8 @@ int main(void)
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   printf("Starting...\r\n");
-  HAL_UART_Receive_IT(&huart2, &usart2_rx, 1); // enable interrupt for USART2 Rx
+  //HAL_UART_Receive_IT(&huart2, &usart2_rx, 1); // enable interrupt for USART2 Rx
+  ATOMIC_SET_BIT(USART2->CR1, USART_CR1_RXNEIE); // usando un funcion mas liviana para reducir memoria
   while (1) {
 	  if (ring_buffer_is_full(&usart2_rb) != 0) {
 		  printf("Received:\r\n");

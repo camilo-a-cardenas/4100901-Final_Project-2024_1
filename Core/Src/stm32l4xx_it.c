@@ -249,11 +249,21 @@ void EXTI9_5_IRQHandler(void)
 void USART2_IRQHandler(void)
 {
   /* USER CODE BEGIN USART2_IRQn 0 */
+	// usando solo la parte de la funcion de interrupcion que necesitamos
+	// solo estamos recibiendo por interrupcion
+	uint32_t isrflags   = READ_REG(USART2->ISR);
+	uint32_t cr1its     = READ_REG(USART2->CR1);
 
+	if (((isrflags & USART_ISR_RXNE) != 0U) && // Rx IT was detected, and
+	      ((cr1its & USART_CR1_RXNEIE) != 0U)) // Rx IT is enabled
+	{
+		HAL_UART_RxCpltCallback(&huart2);
+	}
+#if 0
   /* USER CODE END USART2_IRQn 0 */
   HAL_UART_IRQHandler(&huart2);
   /* USER CODE BEGIN USART2_IRQn 1 */
-
+#endif
   /* USER CODE END USART2_IRQn 1 */
 }
 
@@ -264,10 +274,11 @@ void USART3_IRQHandler(void)
 {
   /* USER CODE BEGIN USART3_IRQn 0 */
 
+#if 0
   /* USER CODE END USART3_IRQn 0 */
   HAL_UART_IRQHandler(&huart3);
   /* USER CODE BEGIN USART3_IRQn 1 */
-
+#endif
   /* USER CODE END USART3_IRQn 1 */
 }
 
