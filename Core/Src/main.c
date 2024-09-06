@@ -111,6 +111,38 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 		left_toggles = 0;
 	}
 }
+
+void low_power_mode()
+{
+#define AWAKE_TIME (10 * 1000) // 10 segundos
+	static uint32_t sleep_tick = AWAKE_TIME;
+
+	if (sleep_tick > HAL_GetTick()) {
+		return;
+	}
+	printf("Sleeping\r\n");
+	sleep_tick = HAL_GetTick() + AWAKE_TIME;
+
+	RCC->AHB1SMENR  = 0x0;
+	RCC->AHB2SMENR  = 0x0;
+	RCC->AHB3SMENR  = 0x0;
+
+	RCC->APB1SMENR1 = 0x0;
+	RCC->APB1SMENR2 = 0x0;
+	RCC->APB2SMENR  = 0x0;
+
+	/*Suspend Tick increment to prevent wakeup by Systick interrupt.
+	Otherwise the Systick interrupt will wake up the device within 1ms (HAL time base)*/
+	HAL_SuspendTick();
+
+	/* Enter Sleep Mode , wake up is done once User push-button is pressed */
+	HAL_PWR_EnterSLEEPMode(PWR_MAINREGULATOR_ON, PWR_SLEEPENTRY_WFI);
+
+	/* Resume Tick interrupt if disabled prior to SLEEP mode entry */
+	HAL_ResumeTick();
+
+	printf("Awake\r\n");
+}
 /* USER CODE END 0 */
 
 /**
@@ -170,6 +202,7 @@ int main(void)
 		  }
 		  printf("\r\n");
 	  }
+	  low_power_mode();
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
