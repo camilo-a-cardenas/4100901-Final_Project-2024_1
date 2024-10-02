@@ -95,7 +95,13 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
 	uint8_t key_pressed = keypad_scan(GPIO_Pin);
 	if (key_pressed != 0xFF) {
+
 		printf("Pressed: %c\r\n", key_pressed);
+
+
+		  ssd1306_SetCursor(25, 30);
+		ssd1306_WriteString(&key_pressed, Font_7x10, White);
+		ssd1306_UpdateScreen();
 		return;
 	}
 
@@ -180,7 +186,8 @@ int main(void)
   /* USER CODE BEGIN 2 */
 
   ssd1306_Init();
-  ssd1306_SetCursor(25, 30);
+  ssd1306_SetCursor(25, 5);
+
   ssd1306_WriteString("Hello World!", Font_7x10, White);
   ssd1306_UpdateScreen();
 
@@ -202,6 +209,7 @@ int main(void)
 		  }
 		  printf("\r\n");
 	  }
+
 	  low_power_mode();
     /* USER CODE END WHILE */
 
