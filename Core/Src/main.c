@@ -28,6 +28,8 @@
 
 #include "ring_buffer.h"
 #include "keypad.h"
+
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -57,9 +59,26 @@ UART_HandleTypeDef huart3;
 uint8_t usart2_buffer[USART2_BUFFER_SIZE];
 ring_buffer_t usart2_rb;
 uint8_t usart2_rx;
+uint8_t IZQ;
+uint8_t DER;
+
+
+
+
+
 
 uint32_t left_toggles = 0;
 uint32_t left_last_press_tick = 0;
+
+typedef enum {
+    MENU_PRINCIPAL,
+    MENU_DIRECCION,
+    SELECCION_IZQUIERDA,
+    SELECCION_DERECHA
+} MenuState;
+
+MenuState currentMenu = MENU_PRINCIPAL;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -68,12 +87,249 @@ static void MX_GPIO_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_USART3_UART_Init(void);
+
+
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+
+/* Private variables ---------------------------------------------------------*/
+#define MAX_DIGITS 4  // Longitud de la clave
+char current_password[MAX_DIGITS + 1] = "";  // Buffer para almacenar la clave actual
+uint8_t digit_index = 0; // Índice para los dígitos ingresados
+char correct_password[MAX_DIGITS + 1] = "1234";  // Clave correcta para comparación
+uint8_t authenticated = 0;  // Estado de autenticación (0 = no autenticado, 1 = autenticado)
+
+char clave_actual[5] = "1234"; // Clave por defecto
+char clave_ingresada[5]; // Para almacenar la clave ingresada
+
+// Función para ingresar clave y validar
+int ingresar_clave() {
+    ssd1306_Fill(Black);
+    ssd1306_SetCursor(0, 0);
+    ssd1306_WriteString("Ingrese Clave:", Font_11x18, White);
+    ssd1306_UpdateScreen();
+
+    // Simulación de ingreso de clave desde teclado 4x4
+    for (int i = 0; i < 4; i++) {
+        clave_ingresada[i] = keypad_scan(GPIO_PIN_All); // Escanear teclado para clave
+        HAL_Delay(500); // Simular tiempo entre teclas
+    }
+    clave_ingresada[4] = '\0'; // Terminar la cadena
+
+    if (strcmp(clave_actual, clave_ingresada) == 0) {
+        ssd1306_Fill(Black);
+        ssd1306_SetCursor(0, 0);
+        ssd1306_WriteString("Auto Encendido", Font_11x18, White);
+        ssd1306_UpdateScreen();
+        HAL_Delay(5000); // Mostrar mensaje por 5 segundos
+        return 1; // Clave correcta
+    } else {
+        ssd1306_Fill(Black);
+        ssd1306_SetCursor(0, 0);
+        ssd1306_WriteString("Clave Incorrecta", Font_11x18, White);
+        ssd1306_UpdateScreen();
+        HAL_Delay(2000);
+        return 0; // Clave incorrecta
+    }
+}
+
+/* Función para actualizar la pantalla con la clave ingresada */
+void update_password_display() {
+    ssd1306_Fill(Black);  // Limpiar la pantalla
+    ssd1306_SetCursor(0, 0);
+    ssd1306_WriteString("Clave: ", Font_11x18, White);
+
+    // Mostrar los dígitos ingresados
+    ssd1306_SetCursor(0, 20);
+    ssd1306_WriteString(current_password, Font_11x18, White);
+
+    ssd1306_UpdateScreen();  // Actualizar la pantalla
+}
+
+/* Función que se llama cada vez que se presiona una tecla */
+void process_keypad_input(uint8_t key) {
+    // Si el usuario ya está autenticado, no necesita ingresar la clave de nuevo
+    if (authenticated) {
+        // Aquí podrías continuar con la siguiente fase o menú
+        // Por ejemplo, manejar direccional, etc.
+        ssd1306_Fill(Black);
+        ssd1306_SetCursor(0, 0);
+        ssd1306_WriteString("Menu Direccional", Font_11x18, White);
+        ssd1306_UpdateScreen();
+        return;
+    }
+
+    // Si el usuario no está autenticado, seguir pidiendo clave
+    // Verificar si la tecla es un dígito
+    if (key >= '0' && key <= '9') {
+        if (digit_index < MAX_DIGITS) {
+            current_password[digit_index++] = key;  // Añadir el dígito al buffer
+            current_password[digit_index] = '\0';  // Asegurar que el string termine en '\0'
+            update_password_display();  // Actualizar la pantalla
+        }
+
+        // Verificar si ya se ingresaron los 4 dígitos
+        if (digit_index == MAX_DIGITS) {
+            verify_password();  // Verificar la clave
+        }
+    }
+
+    // Manejar la tecla 'A' para cambiar clave solo si está autenticado
+    if (key == 'A') {
+        if (authenticated) {
+            // Aquí implementas la lógica para cambiar la clave
+            ssd1306_Fill(Black);
+            ssd1306_SetCursor(0, 0);
+            ssd1306_WriteString("Cambio de clave", Font_11x18, White);
+            ssd1306_UpdateScreen();
+            // Lógica para cambiar la clave...
+        } else {
+            // Mostrar un mensaje de error si el usuario no está autenticado
+            ssd1306_Fill(Black);
+            ssd1306_SetCursor(0, 0);
+            ssd1306_WriteString("Acceso Denegado", Font_11x18, White);
+            ssd1306_UpdateScreen();
+        }
+    }
+}
+
+
+
+/* Función para verificar si la clave ingresada es correcta */
+void verify_password() {
+    if (strcmp(current_password, correct_password) == 0) {
+        // Clave correcta
+        ssd1306_Fill(Black);  // Limpiar la pantalla
+        ssd1306_SetCursor(0, 0);
+        ssd1306_WriteString("Clave Correcta!", Font_11x18, White);
+        ssd1306_UpdateScreen();
+        authenticated = 1;  // El usuario ahora está autenticado
+    } else {
+        // Clave incorrecta
+        ssd1306_Fill(Black);  // Limpiar la pantalla
+        ssd1306_SetCursor(0, 0);
+        ssd1306_WriteString("Clave Incorrecta", Font_11x18, White);
+        ssd1306_UpdateScreen();
+    }
+
+    // Reiniciar la clave ingresada
+    digit_index = 0;
+    current_password[0] = '\0';  // Limpiar el buffer
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+void cambiar_clave() {
+    if (ingresar_clave()) { // Verificar si la clave ingresada es correcta
+        ssd1306_Fill(Black);
+        ssd1306_SetCursor(0, 0);
+        ssd1306_WriteString("Nueva Clave:", Font_11x18, White);
+        ssd1306_UpdateScreen();
+
+        // Ingreso de nueva clave
+        for (int i = 0; i < 4; i++) {
+            clave_actual[i] = keypad_scan(GPIO_PIN_All);
+            HAL_Delay(500); // Simular tiempo entre teclas
+        }
+        clave_actual[4] = '\0'; // Terminar la cadena
+        ssd1306_Fill(Black);
+        ssd1306_SetCursor(0, 0);
+        ssd1306_WriteString("Clave Cambiada", Font_11x18, White);
+        ssd1306_UpdateScreen();
+        HAL_Delay(2000);
+    }
+}
+void parpadear_senal(uint8_t pin, int repeticiones) {
+    for (int i = 0; i < repeticiones; i++) {
+        HAL_GPIO_WritePin(GPIOA, pin, GPIO_PIN_SET);
+        HAL_Delay(500);
+        HAL_GPIO_WritePin(GPIOA, pin, GPIO_PIN_RESET);
+        HAL_Delay(500);
+    }
+}
+
+void manejar_direccional(char direccion) {
+    if (direccion == '1') { // Izquierda
+        parpadear_senal(LED_LEFT_Pin, 3);
+    } else if (direccion == '3') { // Derecha
+        parpadear_senal(LED_RIGHT_Pin, 3);
+    } else if (direccion == '2') { // Stop
+        parpadear_senal(LED_HEARTBEAT_Pin, 3);
+    }
+}
+
+void modo_direccional() {
+    char tecla = keypad_scan(GPIO_PIN_All);
+    manejar_direccional(tecla);
+
+    // Verificar si se vuelve a presionar para iniciar bucle infinito
+    if (tecla == '1' || tecla == '2' || tecla == '3') {
+        while (1) {
+            manejar_direccional(tecla);
+        }
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+void display_menu() {
+	ssd1306_Fill(Black); // Limpiar pantalla
+    ssd1306_SetCursor(0, 0);
+    ssd1306_WriteString("1)Direccional\n", Font_11x18, White);
+    ssd1306_SetCursor(0, 20);
+    ssd1306_WriteString("2) Stop\n", Font_11x18, White);
+    ssd1306_UpdateScreen();
+}
+
+void display_dir_menu() {
+	ssd1306_Fill(Black); // Limpiar pantalla
+    ssd1306_SetCursor(0, 0);
+    ssd1306_WriteString("1)Der\n", Font_11x18, White);
+    ssd1306_SetCursor(0, 25);
+    ssd1306_WriteString("1)2) Izq\n", Font_11x18, White);
+    ssd1306_UpdateScreen();
+}
+
+void signal_direction(uint8_t direction) {
+	ssd1306_Fill(Black); // Limpiar pantalla
+    ssd1306_SetCursor(0, 0);
+    if (direction == DER) {
+        ssd1306_WriteString(">> Derecha >>", Font_11x18, White);
+    } else if (direction == IZQ) {
+    	ssd1306_WriteString("<< Izquierda <<", Font_11x18, White);
+    }
+    ssd1306_UpdateScreen();
+    HAL_Delay(2000); // Mantener la señal por 2 segundos
+}
+
+
 int _write(int file, char *ptr, int len)
 {
   HAL_UART_Transmit(&huart2, (uint8_t *)ptr, len, 10);
@@ -93,17 +349,17 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
-	uint8_t key_pressed = keypad_scan(GPIO_Pin);
-	if (key_pressed != 0xFF) {
-
-		printf("Pressed: %c\r\n", key_pressed);
 
 
-		  ssd1306_SetCursor(25, 30);
-		ssd1306_WriteString(&key_pressed, Font_7x10, White);
-		ssd1306_UpdateScreen();
-		return;
-	}
+
+
+    uint8_t key_pressed = keypad_scan(GPIO_Pin);
+
+    // Llamar a la función para procesar la tecla presionada
+    process_keypad_input(key_pressed);
+
+    // Aquí puedes continuar con la lógica del menú si es necesario
+
 
 	if (GPIO_Pin == BUTTON_RIGHT_Pin) {
 		HAL_UART_Transmit(&huart2, (uint8_t *)"S1\r\n", 4, 10);
@@ -116,7 +372,9 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 	} else if (GPIO_Pin == BUTTON_LEFT_Pin) {
 		left_toggles = 0;
 	}
-}
+
+	}
+
 
 void low_power_mode()
 {
@@ -169,6 +427,10 @@ int main(void)
 
   /* USER CODE BEGIN Init */
 
+
+
+
+
   /* USER CODE END Init */
 
   /* Configure the system clock */
@@ -183,13 +445,17 @@ int main(void)
   MX_I2C1_Init();
   MX_USART2_UART_Init();
   MX_USART3_UART_Init();
+
+
+
   /* USER CODE BEGIN 2 */
 
   ssd1306_Init();
   ssd1306_SetCursor(25, 5);
 
-  ssd1306_WriteString("Hello World!", Font_7x10, White);
-  ssd1306_UpdateScreen();
+
+
+
 
   ring_buffer_init(&usart2_rb, usart2_buffer, USART2_BUFFER_SIZE);
   /* USER CODE END 2 */
@@ -200,6 +466,20 @@ int main(void)
   //HAL_UART_Receive_IT(&huart2, &usart2_rx, 1); // enable interrupt for USART2 Rx
   ATOMIC_SET_BIT(USART2->CR1, USART_CR1_RXNEIE); // usando un funcion mas liviana para reducir memoria
   while (1) {
+
+
+
+	  if (ingresar_clave()) { // Verificar clave
+	              char tecla = keypad_scan(GPIO_PIN_All);
+
+	              if (tecla == '1' || tecla == '2' || tecla == '3') {
+	                  modo_direccional();
+	              } else if (tecla == 'A') {
+	                  cambiar_clave(); // Cambiar clave
+	              }
+	          }
+
+
 	  if (ring_buffer_is_full(&usart2_rb) != 0) {
 		  printf("Received:\r\n");
 		  while (ring_buffer_is_empty(&usart2_rb) == 0) {
