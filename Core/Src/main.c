@@ -66,9 +66,12 @@ uint8_t DER;
 
 
 
-
 uint32_t left_toggles = 0;
+uint32_t right_toggles = 0;
 uint32_t left_last_press_tick = 0;
+uint32_t right_last_press_tick = 0;
+
+
 
 typedef enum {
     MENU_PRINCIPAL,
@@ -125,6 +128,7 @@ void process_keypad_input(uint8_t key) {
           // Aquí se abre el menú de comandos
         uint8_t key_pressed = keypad_scan(key);
 
+
     }
 
     // Si el usuario no está autenticado, sigue pidiendo la clave
@@ -154,6 +158,8 @@ void comandos(uint8_t key2) {
     ssd1306_SetCursor(0, 40);
     ssd1306_WriteString("4)C.CLAVE", Font_11x18, White);
     ssd1306_UpdateScreen();
+    HAL_UART_Transmit(&huart2,(uint8_t *)"MENU\r\n1)IZQ 2)STOP\r\n3) DER\r\n4)C.CLAVE\r\n",47 , 10);
+    HAL_UART_Transmit(&huart3,(uint8_t *)"MENU\r\n1)IZQ 2)STOP\r\n3) DER\r\n4)C.CLAVE\r\n",47 , 10);
 
 
 
@@ -171,7 +177,10 @@ void comandos(uint8_t key2) {
         cambiar_clave();  // Cambiar clave
     } else {
         // Si ninguna tecla es válida, mostrar un error o continuar
-        printf("Comando no reconocido\r\n");
+
+        ssd1306_WriteString("Comando no reconocido", Font_11x18, White);
+		HAL_UART_Transmit(&huart2,(uint8_t *)"Comando no reconocido\r\n",24 , 10);
+		HAL_UART_Transmit(&huart3, (uint8_t *)"Comando no reconocido\r\n", 24, 10);
     }
 }
 
@@ -187,6 +196,8 @@ void verify_password() {
         ssd1306_Fill(Black);
         ssd1306_SetCursor(0, 0);
         ssd1306_WriteString("Clave Correcta!", Font_11x18, White);
+        HAL_UART_Transmit(&huart2, (uint8_t *)"Clave Correcta!\r\n",18 , 10);
+        HAL_UART_Transmit(&huart3, (uint8_t *)"Clave Correcta!\r\n", 18, 10);
         ssd1306_UpdateScreen();
         authenticated = 1;  // El usuario ahora está autenticado
     } else {
@@ -194,6 +205,8 @@ void verify_password() {
         ssd1306_SetCursor(0, 0);
         ssd1306_WriteString("Clave Incorrecta", Font_11x18, White);
         ssd1306_UpdateScreen();
+        HAL_UART_Transmit(&huart2,(uint8_t *)"Clave Incorrecta\r\n",24 , 10);
+        HAL_UART_Transmit(&huart3, (uint8_t *)"Clave Incorrecta\r\n", 24, 10);
     }
 
     // Reiniciar la clave ingresada
@@ -217,6 +230,8 @@ void cambiar_clave() {
     ssd1306_Fill(Black);
     ssd1306_SetCursor(0, 0);
     ssd1306_WriteString("Nueva Clave:", Font_11x18, White);
+    HAL_UART_Transmit(&huart2,(uint8_t *)"Nueva clave\r\n",15 , 10);
+    HAL_UART_Transmit(&huart3,(uint8_t *)"Nueva clave\r\n",15 , 10);
     ssd1306_UpdateScreen();
 
     // Capturar la nueva clave
@@ -230,26 +245,98 @@ void cambiar_clave() {
     ssd1306_Fill(Black);
     ssd1306_SetCursor(0, 0);
     ssd1306_WriteString("Clave Cambiada", Font_11x18, White);
+    HAL_UART_Transmit(&huart2,(uint8_t *)"Clave cambiada\r\n",19 , 10);
+    HAL_UART_Transmit(&huart3,(uint8_t *)"Clave cambiada\r\n",19 , 10);
     ssd1306_UpdateScreen();
     HAL_Delay(2000);
 }
 
 
 void signal_direction(uint8_t direction) {
-    ssd1306_Fill(Black);
+	static uint16_t last_pressed = 0xFFFF;
+	static uint32_t last_tick = 0;
+	ssd1306_Fill(Black);
     ssd1306_SetCursor(0, 0);
+    last_tick = HAL_GetTick();
+    last_pressed = direction;
+
     if (direction == 1) {
-        ssd1306_WriteString("<< Izquierda <<", Font_11x18, White);
-    } else if (direction == 3) {
+
+    	        if (HAL_GetTick() < (left_last_press_tick + 300)) {
+    	            left_toggles = 0xFFFFFF;  // Presión larga
+    	        } else {
+    	            left_toggles = 6;  // Presión corta
+    	        }
+    	left_last_press_tick = HAL_GetTick();
+    	ssd1306_WriteString("<< Izquierda <<", Font_11x18, White);
+        HAL_UART_Transmit(&huart2,(uint8_t *)"<< Izquierda <<\r\n",19 , 10);
+        HAL_UART_Transmit(&huart3,(uint8_t *)"<< Izquierda <<\r\n",19 , 10);
+    }  else if (direction == 1 || direction == 2 || direction == 3) {
+        left_toggles = 0;
+    }
+
+
+
+
+
+
+    if (direction == 3) {
         ssd1306_WriteString(">> Derecha >>", Font_11x18, White);
+        HAL_UART_Transmit(&huart2,(uint8_t *)">> Derecha >>\r\n",19 , 10);
+        HAL_UART_Transmit(&huart3,(uint8_t *)">> Derecha >>\r\n",19 , 10);
     }
     ssd1306_UpdateScreen();
     HAL_Delay(2000);  // Mantener el mensaje por 2 segundos
 }
+
+
+void heartbeat(void)
+{
+	static uint32_t heartbeat_tick = 0;
+	if (heartbeat_tick < HAL_GetTick()) {
+		heartbeat_tick = HAL_GetTick() + 500;
+		HAL_GPIO_TogglePin(D1_GPIO_Port, D1_Pin);
+	}
+}
+
+void turn_signal_left(void)
+{
+	if(authenticated){
+	static uint32_t turn_toggle_tick = 0;
+	if (turn_toggle_tick < HAL_GetTick()) {
+		if (left_toggles > 0) {
+			turn_toggle_tick = HAL_GetTick() + 500;
+
+			ssd1306_Fill(Black);
+			HAL_Delay(500);
+			ssd1306_SetCursor(0, 0);
+			ssd1306_WriteString("<< Izquierda <<", Font_11x18, White);
+			HAL_UART_Transmit(&huart2,(uint8_t *)"<< Izquierda <<\r\n",19 , 10);
+			HAL_UART_Transmit(&huart3,(uint8_t *)"<< Izquierda <<\r\n",19 , 10);
+			ssd1306_UpdateScreen();
+			left_toggles--;
+		} else {
+			ssd1306_Fill(Black);
+			HAL_Delay(500);
+			ssd1306_SetCursor(0, 0);
+			ssd1306_WriteString("<< Izquierda <<", Font_11x18, White);
+			HAL_UART_Transmit(&huart2,(uint8_t *)"<< Izquierda <<\r\n",19 , 10);
+			HAL_UART_Transmit(&huart3,(uint8_t *)"<< Izquierda <<\r\n",19 , 10);
+			ssd1306_UpdateScreen();
+		}
+
+	}
+	}
+}
+
+
+
 void signal_stop() {
     ssd1306_Fill(Black);
     ssd1306_SetCursor(0, 0);
     ssd1306_WriteString("=== STOP ===", Font_11x18, White);
+    HAL_UART_Transmit(&huart2,(uint8_t *)">> Derecha >>\r\n",19 , 10);
+    HAL_UART_Transmit(&huart3,(uint8_t *)">> Derecha >>\r\n",19 , 10);
     ssd1306_UpdateScreen();
     HAL_Delay(2000);  // Mantener el mensaje por 2 segundos
 }
@@ -285,6 +372,8 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
     // Llamar a la función para procesar la tecla presionada
     process_keypad_input(key_pressed);
     }else{
+
+
     	comandos(key_pressed);
     }
 
@@ -353,6 +442,7 @@ int main(void)
   /* MCU Configuration--------------------------------------------------------*/
 
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
+
 
 	HAL_Init();
 
