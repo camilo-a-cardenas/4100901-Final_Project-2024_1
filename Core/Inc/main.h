@@ -63,8 +63,8 @@ void Error_Handler(void);
 #define BUTTON_RIGHT_Pin GPIO_PIN_4
 #define BUTTON_RIGHT_GPIO_Port GPIOA
 #define BUTTON_RIGHT_EXTI_IRQn EXTI4_IRQn
-#define LED_HEARTBEAT_Pin GPIO_PIN_5
-#define LED_HEARTBEAT_GPIO_Port GPIOA
+#define D2_Pin GPIO_PIN_5
+#define D2_GPIO_Port GPIOA
 #define LED_LEFT_Pin GPIO_PIN_7
 #define LED_LEFT_GPIO_Port GPIOA
 #define COLUMN_1_Pin GPIO_PIN_10
